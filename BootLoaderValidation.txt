@@ -1,0 +1,2 @@
+$bcd = Get-WmiObject -Namespace "root\WMI" -Query "SELECT * FROM BcdObject WHERE Id='{fa926493-6f1c-4193-a414-58f0b2456d1e}'"
+$bcd.GetObject().Elements | Where-Object { $_.Type -eq 0x25000000 }
